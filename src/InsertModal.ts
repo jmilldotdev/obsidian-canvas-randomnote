@@ -1,18 +1,49 @@
-import { Modal, App } from "obsidian";
+import CanvasRandomNotePlugin from "main";
+import { Modal, Setting } from "obsidian";
 
 class InsertModal extends Modal {
-	constructor(app: App) {
-		super(app);
+	plugin: CanvasRandomNotePlugin;
+	confirmed: boolean = false;
+
+	constructor(plugin: CanvasRandomNotePlugin) {
+		super(plugin.app);
+		this.plugin = plugin;
 	}
 
 	onOpen() {
 		const { contentEl } = this;
-		contentEl.setText("Woah!");
-	}
+		contentEl.createEl("h1", { text: "Add notes settings" });
+		const settings = this.plugin.settings;
 
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
+		new Setting(contentEl).addText((text) =>
+			text
+				.setPlaceholder("Number of notes")
+				.setValue(settings.numNotes)
+				.onChange(async (value) => {
+					settings.numNotes = value;
+					await this.plugin.saveSettings();
+				})
+		);
+
+		new Setting(contentEl).addText((text) =>
+			text
+				.setPlaceholder("Number of notes per row")
+				.setValue(settings.numNotesPerRow)
+				.onChange(async (value) => {
+					settings.numNotesPerRow = value;
+					await this.plugin.saveSettings();
+				})
+		);
+
+		new Setting(contentEl).addButton((btn) =>
+			btn
+				.setButtonText("Add Notes")
+				.setCta()
+				.onClick(() => {
+					this.confirmed = true;
+					this.close();
+				})
+		);
 	}
 }
 

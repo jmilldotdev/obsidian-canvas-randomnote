@@ -8,6 +8,7 @@ import {
 } from "src/types";
 import { buildGrid, randomElements } from "src/util";
 import md5 from "md5";
+import InsertModal from "src/InsertModal";
 
 export default class CanvasRandomNotePlugin extends Plugin {
 	settings: PluginSettings;
@@ -97,14 +98,22 @@ export default class CanvasRandomNotePlugin extends Plugin {
 
 	buildFileNodeGrid = (notes: TFile[], canvasContents: Canvas) => {
 		const filenames = notes.map((note) => note.path);
-		const grid = buildGrid(notes.length, 3, 400, 500, 50);
+		const { numNotesPerRow, noteWidth, noteHeight, noteMargin } =
+			this.settings;
+		const grid = buildGrid(
+			notes.length,
+			parseInt(numNotesPerRow),
+			parseInt(noteWidth),
+			parseInt(noteHeight),
+			parseInt(noteMargin)
+		);
 		const fileNodes = grid.map((node, index) => {
 			const fileNode: FileNode = {
 				id: md5(filenames[index]),
 				x: node.x,
 				y: node.y,
-				width: 400,
-				height: 500,
+				width: parseInt(noteWidth),
+				height: parseInt(noteHeight),
 				color: "",
 				type: "file",
 				file: `${filenames[index]}`,
@@ -115,6 +124,20 @@ export default class CanvasRandomNotePlugin extends Plugin {
 		return canvasContents;
 	};
 
+	awaitModal = async (app: App): Promise<boolean> => {
+		return new Promise((resolve, reject) => {
+			try {
+				const modal = new InsertModal(this);
+				modal.onClose = () => {
+					resolve(modal.confirmed);
+				};
+				modal.open();
+			} catch (e) {
+				reject();
+			}
+		});
+	};
+
 	addNotesHandler = async (
 		getNotesFn: (quantity: number) => Promise<TFile[]>
 	) => {
@@ -122,7 +145,12 @@ export default class CanvasRandomNotePlugin extends Plugin {
 		if (activeFile && this.activeFileIsCanvas(activeFile)) {
 			const contents = await this.getContentsOfActiveFile(activeFile);
 			let canvasContents = this.parseCanvasContents(contents);
-			const randomNotes = await getNotesFn(5);
+			console.log("we're here");
+			await this.awaitModal(this.app);
+			console.log("now we're passed");
+			const randomNotes = await getNotesFn(
+				parseInt(this.settings.numNotes)
+			);
 			canvasContents = this.buildFileNodeGrid(
 				randomNotes,
 				canvasContents
@@ -134,6 +162,9 @@ export default class CanvasRandomNotePlugin extends Plugin {
 	};
 
 	async onload() {
+		await this.loadSettings();
+		console.log(this.settings);
+
 		this.addCommand({
 			id: "canvas-randomnote-add-notes",
 			name: "Add Notes to Canvas",

@@ -1,137 +1,168 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Modal, Notice, Plugin, TFile } from "obsidian";
+import SettingsTab from "src/SettingsTab";
+import {
+	DEFAULT_SETTINGS,
+	PluginSettings,
+	Canvas,
+	FileNode,
+	SearchView,
+} from "src/types";
+import { buildGrid, randomElements } from "src/util";
+import md5 from "md5";
 
-// Remember to rename these classes and interfaces!
+export default class CanvasRandomNotePlugin extends Plugin {
+	settings: PluginSettings;
 
-interface MyPluginSettings {
-	mySetting: string;
-}
+	activeFileIsCanvas = (file: TFile) => {
+		return file.extension === "canvas";
+	};
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
+	getContentsOfActiveFile = async (file: TFile) => {
+		// Use fs
+		const contents = await this.app.vault.cachedRead(file);
+		console.log(contents);
+		return contents;
+	};
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+	parseCanvasContents = (contents: string) => {
+		const canvas = JSON.parse(contents) as Canvas;
+		console.log(canvas);
+		return canvas;
+	};
+
+	addDummyFileNode = (canvasContents: Canvas) => {
+		const dummyNode: FileNode = {
+			id: "dummy",
+			x: 0,
+			y: 0,
+			width: 400,
+			height: 500,
+			color: "",
+			type: "file",
+			file: "201901250999.md",
+		};
+		canvasContents.nodes.push(dummyNode);
+		return canvasContents;
+	};
+
+	writeCanvasContents = async (canvasContents: Canvas, file: TFile) => {
+		await this.app.vault.modify(file, JSON.stringify(canvasContents));
+	};
+
+	handlegetRandomNotes = async (quantity: number): Promise<TFile[]> => {
+		const markdownFiles = this.app.vault.getMarkdownFiles();
+
+		const notes = await this.getRandomNotes(markdownFiles, quantity);
+		return notes;
+	};
+
+	handlegetRandomNotesFromSearch = async (
+		quantity: number
+	): Promise<TFile[]> => {
+		const searchView = this.app.workspace.getLeavesOfType("search")[0]
+			?.view as SearchView;
+
+		if (!searchView) {
+			new Notice("The core search plugin is not enabled", 3000);
+			return [];
+		}
+
+		const searchResults = searchView.dom.getFiles();
+
+		if (!searchResults.length) {
+			new Notice("No search results available", 3000);
+			return [];
+		}
+
+		if (searchResults.length < quantity) {
+			new Notice(
+				"Not enough search results available. Using all available options.",
+				3000
+			);
+		}
+
+		const notes = await this.getRandomNotes(searchResults, quantity);
+		return notes;
+	};
+
+	getRandomNotes = async (
+		files: TFile[],
+		quantity: number
+	): Promise<TFile[]> => {
+		const markdownFiles = files.filter((file) => file.extension === "md");
+
+		if (!markdownFiles.length) {
+			new Notice("No files available.", 5000);
+			return [];
+		}
+
+		const notes = randomElements(markdownFiles, quantity);
+		return notes;
+	};
+
+	buildFileNodeGrid = (notes: TFile[], canvasContents: Canvas) => {
+		const filenames = notes.map((note) => note.path);
+		const grid = buildGrid(notes.length, 3, 400, 500, 50);
+		const fileNodes = grid.map((node, index) => {
+			const fileNode: FileNode = {
+				id: md5(filenames[index]),
+				x: node.x,
+				y: node.y,
+				width: 400,
+				height: 500,
+				color: "",
+				type: "file",
+				file: `${filenames[index]}`,
+			};
+			return fileNode;
+		});
+		canvasContents.nodes.push(...fileNodes);
+		return canvasContents;
+	};
 
 	async onload() {
-		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
 		// This adds a complex command that can check whether the current state of the app allows execution of the command
 		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
+			id: "canvas-randomnote-add-notes",
+			name: "Add Notes to Canvas",
+			callback: async () => {
 				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+				const activeFile = this.app.workspace.getActiveFile();
+				if (activeFile && this.activeFileIsCanvas(activeFile)) {
+					const contents = await this.getContentsOfActiveFile(
+						activeFile
+					);
+					let canvasContents = this.parseCanvasContents(contents);
+					console.log(canvasContents);
+					const randomNotes =
+						await this.handlegetRandomNotesFromSearch(5);
+					console.log(randomNotes);
+					canvasContents = this.buildFileNodeGrid(
+						randomNotes,
+						canvasContents
+					);
+					await this.writeCanvasContents(canvasContents, activeFile);
+					await this.getContentsOfActiveFile(activeFile);
 
-					// This command will only show up in Command Palette when the check function returns true
 					return true;
 				}
-			}
+			},
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+		this.addSettingTab(new SettingsTab(this.app, this));
 	}
 
-	onunload() {
-
-	}
+	onunload() {}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			await this.loadData()
+		);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		containerEl.createEl('h2', {text: 'Settings for my awesome plugin.'});
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					console.log('Secret: ' + value);
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
 	}
 }

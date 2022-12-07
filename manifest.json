@@ -1,7 +1,7 @@
 {
 	"id": "canvas-randomnote",
 	"name": "Canvas Random Note",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"minAppVersion": "0.15.0",
 	"description": "Random notes from search on the Obsidian canvas",
 	"author": "Obsidian",

@@ -19,13 +19,22 @@ export default class CanvasRandomNotePlugin extends Plugin {
 
 	getContentsOfActiveFile = async (file: TFile) => {
 		const contents = await this.app.vault.cachedRead(file);
-		console.log(contents);
 		return contents;
+	};
+
+	handleEmptyCanvas = () => {
+		return {
+			nodes: [],
+			edges: [],
+		};
 	};
 
 	parseCanvasContents = (contents: string) => {
 		const canvas = JSON.parse(contents) as Canvas;
 		console.log(canvas);
+		if (Object.keys(canvas).length === 0) {
+			return this.handleEmptyCanvas();
+		}
 		return canvas;
 	};
 
@@ -143,30 +152,37 @@ export default class CanvasRandomNotePlugin extends Plugin {
 	addNotesHandler = async (
 		getNotesFn: (quantity: number) => Promise<TFile[]>
 	) => {
-		const activeFile = this.app.workspace.getActiveFile();
-		if (activeFile && this.activeFileIsCanvas(activeFile)) {
-			const contents = await this.getContentsOfActiveFile(activeFile);
-			let canvasContents = this.parseCanvasContents(contents);
-			const confirmed = await this.awaitModal(this.app);
-			if (!confirmed) {
-				return;
+		try {
+			const activeFile = this.app.workspace.getActiveFile();
+			if (activeFile && this.activeFileIsCanvas(activeFile)) {
+				const contents = await this.getContentsOfActiveFile(activeFile);
+				let canvasContents = this.parseCanvasContents(contents);
+				const confirmed = await this.awaitModal(this.app);
+				if (!confirmed) {
+					return;
+				}
+				const randomNotes = await getNotesFn(
+					parseInt(this.settings.numNotes)
+				);
+				canvasContents = this.buildFileNodeGrid(
+					randomNotes,
+					canvasContents
+				);
+				this.writeCanvasContents(canvasContents, activeFile);
+			} else {
+				new Notice("No active canvas file.", 5000);
 			}
-			const randomNotes = await getNotesFn(
-				parseInt(this.settings.numNotes)
+		} catch (e) {
+			console.error(e);
+			new Notice(
+				"An unexpected error has occurred. It's possible the Obsidian app is out of sync with the canvas file contents. Wait a few moments before running commands.",
+				5000
 			);
-			canvasContents = this.buildFileNodeGrid(
-				randomNotes,
-				canvasContents
-			);
-			this.writeCanvasContents(canvasContents, activeFile);
-		} else {
-			new Notice("No active canvas file.", 5000);
 		}
 	};
 
 	async onload() {
 		await this.loadSettings();
-		console.log(this.settings);
 
 		this.addCommand({
 			id: "canvas-randomnote-add-notes",

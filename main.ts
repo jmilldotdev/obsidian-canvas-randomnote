@@ -1,5 +1,4 @@
 import { App, Modal, Notice, Plugin, TFile } from "obsidian";
-import SettingsTab from "src/SettingsTab";
 import {
 	DEFAULT_SETTINGS,
 	PluginSettings,
@@ -18,7 +17,6 @@ export default class CanvasRandomNotePlugin extends Plugin {
 	};
 
 	getContentsOfActiveFile = async (file: TFile) => {
-		// Use fs
 		const contents = await this.app.vault.cachedRead(file);
 		console.log(contents);
 		return contents;
@@ -30,27 +28,24 @@ export default class CanvasRandomNotePlugin extends Plugin {
 		return canvas;
 	};
 
-	addDummyFileNode = (canvasContents: Canvas) => {
-		const dummyNode: FileNode = {
-			id: "dummy",
-			x: 0,
-			y: 0,
-			width: 400,
-			height: 500,
-			color: "",
-			type: "file",
-			file: "201901250999.md",
-		};
-		canvasContents.nodes.push(dummyNode);
-		return canvasContents;
-	};
-
 	writeCanvasContents = async (canvasContents: Canvas, file: TFile) => {
 		await this.app.vault.modify(file, JSON.stringify(canvasContents));
 	};
 
 	handlegetRandomNotes = async (quantity: number): Promise<TFile[]> => {
 		const markdownFiles = this.app.vault.getMarkdownFiles();
+
+		if (!markdownFiles.length) {
+			new Notice("No files available.", 5000);
+			return [];
+		}
+
+		if (markdownFiles.length < quantity) {
+			new Notice(
+				"Not enough files available. Using all available options.",
+				5000
+			);
+		}
 
 		const notes = await this.getRandomNotes(markdownFiles, quantity);
 		return notes;
@@ -120,36 +115,39 @@ export default class CanvasRandomNotePlugin extends Plugin {
 		return canvasContents;
 	};
 
+	addNotesHandler = async (
+		getNotesFn: (quantity: number) => Promise<TFile[]>
+	) => {
+		const activeFile = this.app.workspace.getActiveFile();
+		if (activeFile && this.activeFileIsCanvas(activeFile)) {
+			const contents = await this.getContentsOfActiveFile(activeFile);
+			let canvasContents = this.parseCanvasContents(contents);
+			const randomNotes = await getNotesFn(5);
+			canvasContents = this.buildFileNodeGrid(
+				randomNotes,
+				canvasContents
+			);
+			this.writeCanvasContents(canvasContents, activeFile);
+		} else {
+			new Notice("No active canvas file.", 5000);
+		}
+	};
+
 	async onload() {
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
 		this.addCommand({
 			id: "canvas-randomnote-add-notes",
 			name: "Add Notes to Canvas",
 			callback: async () => {
-				// Conditions to check
-				const activeFile = this.app.workspace.getActiveFile();
-				if (activeFile && this.activeFileIsCanvas(activeFile)) {
-					const contents = await this.getContentsOfActiveFile(
-						activeFile
-					);
-					let canvasContents = this.parseCanvasContents(contents);
-					console.log(canvasContents);
-					const randomNotes =
-						await this.handlegetRandomNotesFromSearch(5);
-					console.log(randomNotes);
-					canvasContents = this.buildFileNodeGrid(
-						randomNotes,
-						canvasContents
-					);
-					await this.writeCanvasContents(canvasContents, activeFile);
-					await this.getContentsOfActiveFile(activeFile);
-
-					return true;
-				}
+				this.addNotesHandler(this.handlegetRandomNotes);
 			},
 		});
-
-		this.addSettingTab(new SettingsTab(this.app, this));
+		this.addCommand({
+			id: "canvas-randomnote-add-notes-from-search",
+			name: "Add Notes to Canvas from Search",
+			callback: async () => {
+				this.addNotesHandler(this.handlegetRandomNotesFromSearch);
+			},
+		});
 	}
 
 	onunload() {}

@@ -16,16 +16,20 @@ export function buildGrid(
 	numberElemsPerRow: number,
 	elemWidth: number,
 	elemHeight: number,
-	elemMargin: number
+	elemMargin: number,
+	xAnchor: number,
+	yAnchor: number
 ): { x: number; y: number }[] {
-	const grid: { x: number; y: number }[] = [];
+	const grid = [];
+	let x = xAnchor;
+	let y = yAnchor;
 	for (let i = 0; i < numberElems; i++) {
-		const row = Math.floor(i / numberElemsPerRow);
-		const col = i % numberElemsPerRow;
-		grid.push({
-			x: col * (elemWidth + elemMargin),
-			y: row * (elemHeight + elemMargin),
-		});
+		grid.push({ x, y });
+		x += elemWidth + elemMargin;
+		if ((i + 1) % numberElemsPerRow === 0) {
+			x = xAnchor;
+			y += elemHeight + elemMargin;
+		}
 	}
 	return grid;
 }

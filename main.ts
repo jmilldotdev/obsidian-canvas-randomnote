@@ -98,14 +98,16 @@ export default class CanvasRandomNotePlugin extends Plugin {
 
 	buildFileNodeGrid = (notes: TFile[], canvasContents: Canvas) => {
 		const filenames = notes.map((note) => note.path);
-		const { numNotesPerRow, noteWidth, noteHeight, noteMargin } =
+		const { numNotesPerRow, noteWidth, noteHeight, noteMargin, x, y } =
 			this.settings;
 		const grid = buildGrid(
 			notes.length,
 			parseInt(numNotesPerRow),
 			parseInt(noteWidth),
 			parseInt(noteHeight),
-			parseInt(noteMargin)
+			parseInt(noteMargin),
+			parseInt(x),
+			parseInt(y)
 		);
 		const fileNodes = grid.map((node, index) => {
 			const fileNode: FileNode = {
@@ -145,9 +147,10 @@ export default class CanvasRandomNotePlugin extends Plugin {
 		if (activeFile && this.activeFileIsCanvas(activeFile)) {
 			const contents = await this.getContentsOfActiveFile(activeFile);
 			let canvasContents = this.parseCanvasContents(contents);
-			console.log("we're here");
-			await this.awaitModal(this.app);
-			console.log("now we're passed");
+			const confirmed = await this.awaitModal(this.app);
+			if (!confirmed) {
+				return;
+			}
 			const randomNotes = await getNotesFn(
 				parseInt(this.settings.numNotes)
 			);

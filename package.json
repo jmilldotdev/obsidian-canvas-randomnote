@@ -1,6 +1,6 @@
 {
 	"name": "canvas-randomnote",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Add random notes from your vault to the Obsidian canvas",
 	"main": "main.js",
 	"scripts": {

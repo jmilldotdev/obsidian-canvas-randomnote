@@ -20,22 +20,6 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	numNotesPerRow: "3",
 };
 
-export interface Canvas {
-	nodes: any[];
-	edges: any[];
-}
-
-export interface FileNode {
-	id: string;
-	x: number;
-	y: number;
-	width: number;
-	height: number;
-	color: string;
-	type: string;
-	file: string;
-}
-
 export interface SearchView extends View {
 	dom: SearchDOM;
 }

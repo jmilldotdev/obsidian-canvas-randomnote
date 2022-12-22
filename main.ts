@@ -1,11 +1,6 @@
-import { App, Modal, Notice, Plugin, TFile } from "obsidian";
-import {
-	DEFAULT_SETTINGS,
-	PluginSettings,
-	Canvas,
-	FileNode,
-	SearchView,
-} from "src/types";
+import { App, Notice, Plugin, TFile } from "obsidian";
+import { CanvasData, CanvasFileData } from "obsidian/canvas";
+import { DEFAULT_SETTINGS, PluginSettings, SearchView } from "src/types";
 import { buildGrid, randomElements } from "src/util";
 import md5 from "md5";
 import InsertModal from "src/InsertModal";
@@ -17,29 +12,21 @@ export default class CanvasRandomNotePlugin extends Plugin {
 		return file.extension === "canvas";
 	};
 
-	getContentsOfActiveFile = async (file: TFile) => {
-		const contents = await this.app.vault.cachedRead(file);
-		return contents;
+	getCanvasContents = async (file: TFile): Promise<CanvasData> => {
+		const fileContents = await this.app.vault.read(file);
+		if (!fileContents) {
+			return this.handleEmptyCanvas();
+		}
+		const canvasData = JSON.parse(fileContents) as CanvasData;
+		return canvasData;
 	};
 
 	handleEmptyCanvas = () => {
-		return {
+		const data: CanvasData = {
 			nodes: [],
 			edges: [],
 		};
-	};
-
-	parseCanvasContents = (contents: string) => {
-		const canvas = JSON.parse(contents) as Canvas;
-		console.log(canvas);
-		if (Object.keys(canvas).length === 0) {
-			return this.handleEmptyCanvas();
-		}
-		return canvas;
-	};
-
-	writeCanvasContents = async (canvasContents: Canvas, file: TFile) => {
-		await this.app.vault.modify(file, JSON.stringify(canvasContents));
+		return data;
 	};
 
 	handlegetRandomNotes = async (quantity: number): Promise<TFile[]> => {
@@ -105,7 +92,7 @@ export default class CanvasRandomNotePlugin extends Plugin {
 		return notes;
 	};
 
-	buildFileNodeGrid = (notes: TFile[], canvasContents: Canvas) => {
+	buildFileNodeGrid = (notes: TFile[], canvasData: CanvasData) => {
 		const filenames = notes.map((note) => note.path);
 		const { numNotesPerRow, noteWidth, noteHeight, noteMargin, x, y } =
 			this.settings;
@@ -119,7 +106,7 @@ export default class CanvasRandomNotePlugin extends Plugin {
 			parseInt(y)
 		);
 		const fileNodes = grid.map((node, index) => {
-			const fileNode: FileNode = {
+			const fileNode: CanvasFileData = {
 				id: md5(filenames[index]),
 				x: node.x,
 				y: node.y,
@@ -131,11 +118,16 @@ export default class CanvasRandomNotePlugin extends Plugin {
 			};
 			return fileNode;
 		});
-		canvasContents.nodes.push(...fileNodes);
-		return canvasContents;
+		canvasData.nodes = canvasData.nodes.concat(fileNodes);
+		return canvasData;
 	};
 
-	awaitModal = async (app: App): Promise<boolean> => {
+	writeCanvasFile = async (file: TFile, canvasData: CanvasData) => {
+		const fileContents = JSON.stringify(canvasData);
+		await this.app.vault.modify(file, fileContents);
+	};
+
+	awaitModal = async (): Promise<boolean> => {
 		return new Promise((resolve, reject) => {
 			try {
 				const modal = new InsertModal(this);
@@ -155,20 +147,19 @@ export default class CanvasRandomNotePlugin extends Plugin {
 		try {
 			const activeFile = this.app.workspace.getActiveFile();
 			if (activeFile && this.activeFileIsCanvas(activeFile)) {
-				const contents = await this.getContentsOfActiveFile(activeFile);
-				let canvasContents = this.parseCanvasContents(contents);
-				const confirmed = await this.awaitModal(this.app);
+				let canvasContents = await this.getCanvasContents(activeFile);
+				const confirmed = await this.awaitModal();
 				if (!confirmed) {
 					return;
 				}
 				const randomNotes = await getNotesFn(
 					parseInt(this.settings.numNotes)
 				);
-				canvasContents = this.buildFileNodeGrid(
+				const newContents = this.buildFileNodeGrid(
 					randomNotes,
 					canvasContents
 				);
-				this.writeCanvasContents(canvasContents, activeFile);
+				await this.writeCanvasFile(activeFile, newContents);
 			} else {
 				new Notice("No active canvas file.", 5000);
 			}
